@@ -35,9 +35,18 @@ function createLogo(onLoaded) {
   const img = document.createElement("img");
   img.alt = "Logo"; img.referrerPolicy = "no-referrer";
   Object.assign(img.style,{width:"80px",height:"80px",objectFit:"contain",flexShrink:"0"});
-  const sources = [LOGO_GITHUB, LOGO_EXT, LOGO_DATAURL].filter(Boolean);
+  
+  // [FIX] Đảo ngược ưu tiên: Dùng DataURL (offline) trước để hiển thị nhanh nhất, tránh nghẽn mạng do gọi GitHub
+  const sources = [LOGO_DATAURL, LOGO_EXT, LOGO_GITHUB].filter(Boolean);
   let i=0, done=false;
-  const next=()=>{ if(!done){ if(i>=sources.length){ done=true; onLoaded&&onLoaded(); } else { img.src = sources[i++]; }}};
+  
+  const next=()=>{ 
+    if(!done){ 
+      if(i>=sources.length){ done=true; onLoaded&&onLoaded(); } 
+      else { img.src = sources[i++]; }
+    }
+  };
+  
   img.onload=()=>{ if(!done){ done=true; onLoaded&&onLoaded(); }};
   img.onerror=next; next(); return img;
 }
@@ -79,7 +88,8 @@ function getFullOrderByCode(code) {
 async function isDiscordSent(code){ const g = await getFromLocal(`TIS:discordSent:${code}`); return !!g[`TIS:discordSent:${code}`]; }
 function markDiscordSent(code){ return saveToLocal({ [`TIS:discordSent:${code}`]: true }); }
 
-async function notifyDiscord(orderCode, receiver, fullJson) {
+// [FIX] Bổ sung biến retryCount để chống trượt đơn hàng khi rớt mạng hoặc bị rate limit
+async function notifyDiscord(orderCode, receiver, fullJson, retryCount = 0) {
   if (await isDiscordSent(orderCode)) return;
 
   const creator = await getCreatorName();
@@ -107,10 +117,25 @@ async function notifyDiscord(orderCode, receiver, fullJson) {
     const res = await fetch(WEBHOOK_URL, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
+    
     if (res.ok) {
       await markDiscordSent(orderCode);
-      sessionStorage.setItem('TIS_AUTO_RELOAD', 'first');
-      setTimeout(() => { window.location.reload(); }, 1000);
+      console.log(`[TIS VIP PRO] Bắn dữ liệu thành công mã đơn: ${orderCode}`);
+      // [FIX] Bỏ đoạn ép reload trang để tránh Race Condition cắt đứt Request
+    } else if (res.status === 429) {
+      // Bị Discord chặn do gửi quá nhanh
+      console.warn(`[TIS VIP PRO] Quá tải Webhook Discord! Thử lại lần ${retryCount + 1}...`);
+      if (retryCount < 5) {
+         setTimeout(() => notifyDiscord(orderCode, receiver, fullJson, retryCount + 1), 3000); // Đợi 3s rồi gửi lại
+      }
+    } else {
+      console.error(`[TIS VIP PRO] Discord trả về lỗi: ${res.status}`);
     }
-  } catch (e) { console.warn("Gửi Discord thất bại:", e); }
+  } catch (e) { 
+    console.warn("[TIS VIP PRO] Rớt mạng khi gửi Discord:", e);
+    // Tự động thử lại khi rớt mạng cục bộ
+    if (retryCount < 3) {
+      setTimeout(() => notifyDiscord(orderCode, receiver, fullJson, retryCount + 1), 5000);
+    }
+  }
 }

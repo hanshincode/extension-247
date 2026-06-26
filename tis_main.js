@@ -1,29 +1,26 @@
 // ==========================================
-// FILE 4: tis_main.js - ROUTER ĐIỀU HƯỚNG
+// FILE 3: tis_main.js - ĐIỀU HƯỚNG CHỨC NĂNG
 // ==========================================
 
-let lastUrl = location.href;
+console.log("[TIS VIP PRO] Hệ thống lõi đã khởi động!");
 
-// Kiểm tra xem đang đứng ở link nào để chạy code của file tương ứng
-function checkRoute() {
-  const path = location.pathname || "";
-  
-  if (/\/khach-hang\/(tao-don-hang|dat-don-hang|don-hang)/.test(path)) {
-    if (typeof onCreatePage === 'function') onCreatePage();
-  }
-  
-  if (path.includes("/khach-hang/in-don-hang")) {
-    if (typeof onPrintPage === 'function') onPrintPage();
-  }
-}
-
-// Chạy ngay khi vừa load web
-checkRoute();
-
-// Liên tục giám sát sự thay đổi của thanh địa chỉ URL (xử lý lỗi bấm chuyển trang không tải lại của 247Express)
-new MutationObserver(() => {
-  if (location.href !== lastUrl) {
-    lastUrl = location.href;
-    checkRoute();
-  }
-}).observe(document.body, { childList: true, subtree: true });
+// Chờ toàn bộ cấu trúc web tải xong rồi mới nạp script để tránh lỗi DOM
+window.addEventListener("load", () => {
+    const currentUrl = location.href.toLowerCase();
+    
+    // Nếu URL có chứa chữ "in-don-hang", gọi tính năng dành cho trang In
+    if (currentUrl.includes("in-don-hang")) {
+        console.log("[TIS VIP PRO] Phát hiện trang In Đơn. Kích hoạt module In...");
+        if (typeof onPrintPage === "function") {
+            onPrintPage();
+        } else {
+            console.error("Thiếu file tis_print.js hoặc hàm onPrintPage chưa được định nghĩa.");
+        }
+    } 
+    // Các trang còn lại (như tạo đơn), gọi tính năng Tạo
+    else {
+        if (typeof onCreatePage === "function") {
+            onCreatePage();
+        }
+    }
+});

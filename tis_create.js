@@ -5,24 +5,7 @@
 async function onCreatePage() {
   await ensureCreatorName();
 
-  if (document.referrer.includes("/khach-hang/don-hang")) {
-      if (!sessionStorage.getItem('TIS_reloaded_from_don_hang')) {
-          sessionStorage.setItem('TIS_reloaded_from_don_hang', 'true');
-          location.reload();
-          return;
-      }
-  } else {
-      sessionStorage.removeItem('TIS_reloaded_from_don_hang');
-  }
-
-  const reloadState = sessionStorage.getItem('TIS_AUTO_RELOAD');
-  if (reloadState === 'first') {
-    sessionStorage.setItem('TIS_AUTO_RELOAD', 'second');
-    setTimeout(() => window.location.reload(), 1000);
-  } else if (reloadState === 'second') {
-    sessionStorage.removeItem('TIS_AUTO_RELOAD');
-  }
-    
+  // Bỏ đoạn sessionStorage reload nguy hiểm ở bản cũ
   cleanupOldCache();
   ensureFloatingPhoneInput();
   watchSuccessAny();
@@ -34,7 +17,6 @@ async function onCreatePage() {
 function ensureFloatingPhoneInput() {
   if ($("#tis-floating-phone")) return;
 
-  // BƠM CSS HIỆU ỨNG NEON VÀO TRANG
   if (!document.getElementById("tis-neon-style")) {
     const style = document.createElement("style");
     style.id = "tis-neon-style";
@@ -44,9 +26,7 @@ function ensureFloatingPhoneInput() {
         50% { box-shadow: 0 0 15px #ff4d4d, 0 0 25px #ff4d4d, 0 0 35px #ff4d4d; border-color: #ff4d4d; }
         100% { box-shadow: 0 0 5px #E30613, 0 0 10px #E30613; border-color: #E30613; }
       }
-      .tis-neon-warning {
-        animation: tisNeonPulse 1s infinite alternate !important;
-      }
+      .tis-neon-warning { animation: tisNeonPulse 1s infinite alternate !important; }
     `;
     document.head.appendChild(style);
   }
@@ -71,13 +51,12 @@ function ensureFloatingPhoneInput() {
     width: "100%", boxSizing: "border-box", outline: "none", fontWeight: "bold", color: "#333"
   });
 
-  // Xử lý bật/tắt Neon tuỳ thuộc vào việc có chữ hay chưa
   const updateNeonGlow = (val) => {
     if (!val || val.trim() === "") {
       wrap.classList.add("tis-neon-warning");
     } else {
       wrap.classList.remove("tis-neon-warning");
-      wrap.style.borderColor = "#ccc"; // Trả lại viền hiền lành
+      wrap.style.borderColor = "#ccc"; 
       wrap.style.boxShadow = "0 8px 16px rgba(0,0,0,0.2)";
     }
   };
@@ -89,12 +68,12 @@ function ensureFloatingPhoneInput() {
     const d = g["TIS:lastReceiverDraft"];
     const currentPhone = (d && d.receiver && d.receiver.phone) ? d.receiver.phone : "";
     input.value = currentPhone;
-    updateNeonGlow(currentPhone); // Khởi động hiệu ứng khi vừa vào trang
+    updateNeonGlow(currentPhone);
   });
 
   const saveDraft = () => {
     const val = digitsOnly(input.value);
-    updateNeonGlow(val); // Cập nhật hiệu ứng chớp mỗi khi gõ phím
+    updateNeonGlow(val); 
     chrome.storage.local.get("TIS:lastReceiverDraft", (g) => {
       const prev = g["TIS:lastReceiverDraft"] || { receiver: { name: "", address: "", phone: "" }, ts: Date.now() };
       prev.receiver.phone = val; prev.ts = Date.now();
@@ -130,8 +109,9 @@ function showSuccessOverlay(orderCode, rcv) {
   const floatInput = $("#tis-floating-phone input");
   if (floatInput) {
       floatInput.value = "";
-      floatInput.dispatchEvent(new Event('input')); // Ép nó nháy neon lại báo hiệu cho đơn mới
+      floatInput.dispatchEvent(new Event('input'));
   }
+  
   chrome.storage.local.get("TIS:lastReceiverDraft", (g) => {
     const d = g["TIS:lastReceiverDraft"];
     if (d && d.receiver) { d.receiver.phone = ""; chrome.storage.local.set({ "TIS:lastReceiverDraft": d }); }
@@ -153,13 +133,20 @@ function watchSuccessAny() {
   };
 
   $$('[role="dialog"], .ant-modal, .ant-modal-root, .ant-message, .ant-notification, .swal2-popup, .Toastify__toast, .v-toast, .toast, .notification').forEach(tryHandleRoot);
+  
+  // Tối ưu giới hạn vùng theo dõi của MutationObserver để giảm lag
+  const targetNode = document.body;
+  let debounceTimer;
   new MutationObserver((muts) => {
-    muts.forEach(m => m.addedNodes.forEach(n => {
-      if (!(n instanceof Element)) return;
-      const root = n.matches?.('[role="dialog"], .ant-modal, .swal2-popup') ? n : n.querySelector?.('[role="dialog"], .ant-modal, .swal2-popup');
-      if (root) tryHandleRoot(root);
-    }));
-  }).observe(document.documentElement, { childList:true, subtree:true });
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      muts.forEach(m => m.addedNodes.forEach(n => {
+        if (!(n instanceof Element)) return;
+        const root = n.matches?.('[role="dialog"], .ant-modal, .swal2-popup') ? n : n.querySelector?.('[role="dialog"], .ant-modal, .swal2-popup');
+        if (root) tryHandleRoot(root);
+      }));
+    }, 150);
+  }).observe(targetNode, { childList:true, subtree:true });
 }
 
 function hookCreateOrderNetwork() {
@@ -169,14 +156,25 @@ function hookCreateOrderNetwork() {
     try { await maybeCaptureOrder(args, res.clone()); } catch {}
     return res;
   };
-  const _open = XMLHttpRequest.prototype.open; const _send = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (method, url) { this.__url = url||""; this.__method = method||""; return _open.apply(this, arguments); };
+  
+  const _open = XMLHttpRequest.prototype.open; 
+  const _send = XMLHttpRequest.prototype.send;
+  
+  XMLHttpRequest.prototype.open = function (method, url) { 
+      this.__url = url||""; 
+      this.__method = method||""; 
+      return _open.apply(this, arguments); 
+  };
+  
   XMLHttpRequest.prototype.send = function (body) {
-    this.__body = body; const _onload = this.onload;
-    this.onload = async () => {
-      try { await maybeCaptureOrder([this.__url, { method: this.__method, body: this.__body }], this); } catch {}
-      if (_onload) _onload.call(this);
-    };
+    this.__body = body; 
+    
+    // [FIX] Chuyển thành addEventListener thay vì ghi đè onload để tránh bị luồng xử lý chính làm mất
+    this.addEventListener('load', async () => {
+      try { await maybeCaptureOrder([this.__url, { method: this.__method, body: this.__body }], this); } 
+      catch (e) { console.warn("[TIS VIP PRO] Lỗi hook Data", e); }
+    });
+    
     return _send.apply(this, arguments);
   };
 }
@@ -289,10 +287,22 @@ function scrapeReceiverFromCreatePageDOM() {
 
 function bindInputs(selector, handler){
   $$(selector).forEach(el => { el.addEventListener("input", handler, true); el.addEventListener("change", handler, true); });
-  new MutationObserver(()=> $$(selector).forEach(el => {
-    if (!el.__tisBind){ el.__tisBind = true; el.addEventListener("input", handler, true); el.addEventListener("change", handler, true); }
-  })).observe(document.documentElement,{childList:true,subtree:true});
+  
+  let bindTimer;
+  new MutationObserver(()=> {
+    clearTimeout(bindTimer);
+    bindTimer = setTimeout(() => {
+        $$(selector).forEach(el => {
+            if (!el.__tisBind){ 
+                el.__tisBind = true; 
+                el.addEventListener("input", handler, true); 
+                el.addEventListener("change", handler, true); 
+            }
+        });
+    }, 200);
+  }).observe(document.documentElement,{childList:true,subtree:true});
 }
+
 function getVal(sel){ const el=$(sel); return el ? ("value" in el ? (el.value||"").trim() : (el.textContent||"").trim()) : ""; }
 
 function observeDraftInputs() {
@@ -319,6 +329,11 @@ function observePhoneInputs() {
     };
     el.addEventListener("input", fn, true); el.addEventListener("change", fn, true); el.addEventListener("blur", fn, true);
   };
+  
   $$(sel).forEach(save);
-  new MutationObserver(()=> $$(sel).forEach(save)).observe(document.documentElement,{childList:true,subtree:true});
+  let phoneTimer;
+  new MutationObserver(()=> {
+    clearTimeout(phoneTimer);
+    phoneTimer = setTimeout(() => $$(sel).forEach(save), 200);
+  }).observe(document.documentElement,{childList:true,subtree:true});
 }
