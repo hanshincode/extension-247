@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "TIS and 247Express VIP PRO",
+  "version": "2.1.0",
+  "update_url": "https://raw.githubusercontent.com/HanShinVN/extension_tool/main/TIS_247/update.xml",
+  "description": "FROM: truongle.IT.TIS",
+  "icons": { "16": "icon.png", "48": "icon.png", "128": "icon.png" },
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://247express.vn/khach-hang/tao-don-hang*",
+        "https://247express.vn/khach-hang/tao-don-hang/mau-cu*",
+        "https://247express.vn/khach-hang/in-don-hang*"
+      ],
+      "js": [
+        "tis_shared.js",
+        "tis_create.js",
+        "tis_print.js",
+        "tis_main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
